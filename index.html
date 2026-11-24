@@ -49,7 +49,7 @@
       </div>
 
       <!-- メール・パスワードフォーム -->
-      <form id="email-auth-form" class="space-y-3">
+      <form id="email-auth-form" class="space-y-3" novalidate>
         <div id="signup-name-field" class="hidden">
           <label for="auth-name" class="block text-xs font-medium text-gray-700 mb-1">表示名（任意）</label>
           <input id="auth-name" type="text" placeholder="例：たろう"
@@ -58,17 +58,17 @@
 
         <div>
           <label for="auth-email" class="block text-xs font-medium text-gray-700 mb-1">メールアドレス</label>
-          <input id="auth-email" type="email" required autocomplete="email" placeholder="example@mail.com"
+          <input id="auth-email" type="email" autocomplete="email" placeholder="example@mail.com"
             class="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500" />
         </div>
 
         <div>
           <label for="auth-password" class="block text-xs font-medium text-gray-700 mb-1">パスワード（6文字以上）</label>
           <div class="relative">
-            <input id="auth-password" type="password" required minlength="6" autocomplete="current-password" placeholder="••••••••"
-              class="w-full px-3.5 py-2.5 pr-10 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input id="auth-password" type="password" autocomplete="current-password" placeholder="6文字以上"
+              class="w-full px-3.5 py-2.5 pr-12 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             <button id="toggle-password-btn" type="button" aria-label="パスワード表示切り替え"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1">
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 text-xs font-medium px-1.5 py-1">
               表示
             </button>
           </div>
@@ -80,11 +80,11 @@
           </button>
         </div>
 
-        <p id="auth-error" class="hidden text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2"></p>
-        <p id="auth-info" class="hidden text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2"></p>
+        <p id="auth-error" class="hidden text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5 leading-relaxed break-all"></p>
+        <p id="auth-info" class="hidden text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 leading-relaxed"></p>
 
         <button id="email-submit-btn" type="submit"
-          class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm transition">
+          class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-bold rounded-xl shadow-sm transition">
           ログインする
         </button>
       </form>
@@ -291,6 +291,8 @@
       onAuthStateChanged,
       GoogleAuthProvider,
       signInWithPopup,
+      signInWithRedirect,
+      getRedirectResult,
       signInWithEmailAndPassword,
       createUserWithEmailAndPassword,
       updateProfile,
@@ -309,22 +311,50 @@
       orderBy
     } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-    // =========================================================================
-    // ★ ここに、ご自身のFirebaseコンソールで取得した firebaseConfig を貼り付けてください ★
-    // =========================================================================
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyBqy6T-0mFYLAKd4YZcMl880x_DhjeTCQg",
+      authDomain: "time-record-855ed.firebaseapp.com",
+      projectId: "time-record-855ed",
+      storageBucket: "time-record-855ed.firebasestorage.app",
+      messagingSenderId: "231158609094",
+      appId: "1:231158609094:web:18fa07f081b3311364d3c7"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const googleProvider = new GoogleAuthProvider();
+    const loadingScreen = document.getElementById('loading-screen');
+    const authScreen = document.getElementById('auth-screen');
+    const mainScreen = document.getElementById('main-screen');
+    const toastEl = document.getElementById('toast');
+    const authError = document.getElementById('auth-error');
+    const authInfo = document.getElementById('auth-info');
+
+    function showAuthError(msg) {
+      authInfo.classList.add('hidden');
+      authError.textContent = msg;
+      authError.classList.remove('hidden');
+    }
+
+    function showAuthInfo(msg) {
+      authError.classList.add('hidden');
+      authInfo.textContent = msg;
+      authInfo.classList.remove('hidden');
+    }
+
+    function clearAuthMessages() {
+      authError.classList.add('hidden');
+      authInfo.classList.add('hidden');
+    }
+
+    let app, auth, db, googleProvider;
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      googleProvider = new GoogleAuthProvider();
+    } catch (initErr) {
+      loadingScreen.classList.add('hidden');
+      authScreen.classList.remove('hidden');
+      showAuthError(`Firebase初期化エラー: ${initErr.message}`);
+    }
 
     // 状態管理
     let currentUser = null;
@@ -338,12 +368,6 @@
     // タイマー状態
     let timerSeconds = 0;
     let timerInterval = null;
-
-    // 要素参照
-    const loadingScreen = document.getElementById('loading-screen');
-    const authScreen = document.getElementById('auth-screen');
-    const mainScreen = document.getElementById('main-screen');
-    const toastEl = document.getElementById('toast');
 
     function showToast(message) {
       toastEl.textContent = message;
@@ -376,13 +400,10 @@
     const tabSignup = document.getElementById('tab-signup');
     const signupNameField = document.getElementById('signup-name-field');
     const emailSubmitBtn = document.getElementById('email-submit-btn');
-    const authError = document.getElementById('auth-error');
-    const authInfo = document.getElementById('auth-info');
 
     function setAuthMode(signup) {
       isSignupMode = signup;
-      authError.classList.add('hidden');
-      authInfo.classList.add('hidden');
+      clearAuthMessages();
       if (signup) {
         tabSignup.className = 'py-2 text-xs font-bold rounded-lg bg-white text-emerald-700 shadow-sm transition';
         tabLogin.className = 'py-2 text-xs font-bold rounded-lg text-gray-600 hover:text-gray-800 transition';
@@ -409,96 +430,138 @@
 
     document.getElementById('email-auth-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      authError.classList.add('hidden');
-      authInfo.classList.add('hidden');
+      clearAuthMessages();
+      if (!auth) return;
 
       const email = document.getElementById('auth-email').value.trim();
       const password = pwInput.value;
       const displayName = document.getElementById('auth-name').value.trim();
 
+      if (!email) {
+        showAuthError('メールアドレスを入力してください。');
+        return;
+      }
+      if (!password || password.length < 6) {
+        showAuthError('パスワードは6文字以上で入力してください。');
+        return;
+      }
+
+      emailSubmitBtn.disabled = true;
       try {
         if (isSignupMode) {
           const cred = await createUserWithEmailAndPassword(auth, email, password);
           const finalName = displayName || email.split('@')[0];
-          await updateProfile(cred.user, { displayName: finalName });
+          try {
+            await updateProfile(cred.user, { displayName: finalName });
+          } catch (_) {
+            // プロフィール更新失敗時もログイン自体は継続
+          }
         } else {
           await signInWithEmailAndPassword(auth, email, password);
         }
       } catch (err) {
-        authError.textContent = formatAuthError(err.code);
-        authError.classList.remove('hidden');
+        showAuthError(formatAuthError(err));
+      } finally {
+        emailSubmitBtn.disabled = false;
       }
     });
 
     document.getElementById('reset-password-btn').addEventListener('click', async () => {
-      authError.classList.add('hidden');
-      authInfo.classList.add('hidden');
+      clearAuthMessages();
+      if (!auth) return;
       const email = document.getElementById('auth-email').value.trim();
       if (!email) {
-        authError.textContent = '再設定メールを送るメールアドレスを入力してください。';
-        authError.classList.remove('hidden');
+        showAuthError('再設定メールを送るメールアドレスを入力してください。');
         return;
       }
       try {
         await sendPasswordResetEmail(auth, email);
-        authInfo.textContent = `${email} 宛にパスワード再設定の案内メールを送信しました。`;
-        authInfo.classList.remove('hidden');
+        showAuthInfo(`${email} 宛にパスワード再設定の案内メールを送信しました。`);
       } catch (err) {
-        authError.textContent = formatAuthError(err.code);
-        authError.classList.remove('hidden');
+        showAuthError(formatAuthError(err));
       }
     });
 
     document.getElementById('google-login-btn').addEventListener('click', async () => {
-      authError.classList.add('hidden');
+      clearAuthMessages();
+      if (!auth) return;
       try {
         await signInWithPopup(auth, googleProvider);
       } catch (err) {
-        authError.textContent = formatAuthError(err.code);
-        authError.classList.remove('hidden');
+        if (err.code === 'auth/popup-blocked') {
+          try {
+            await signInWithRedirect(auth, googleProvider);
+            return;
+          } catch (redirErr) {
+            showAuthError(formatAuthError(redirErr));
+            return;
+          }
+        }
+        showAuthError(formatAuthError(err));
       }
     });
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
+      if (!auth) return;
       await signOut(auth);
     });
 
-    function formatAuthError(code) {
+    function formatAuthError(err) {
+      const code = err && err.code ? err.code : '';
       switch (code) {
-        case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません。';
+        case 'auth/invalid-email':
+          return 'メールアドレスの形式が正しくありません。（@やドメインを確認してください）';
         case 'auth/user-not-found':
         case 'auth/wrong-password':
-        case 'auth/invalid-credential': return 'メールアドレスまたはパスワードが一致しません。';
-        case 'auth/email-already-in-use': return 'このメールアドレスはすでに登録されています。';
-        case 'auth/weak-password': return 'パスワードは6文字以上で設定してください。';
-        case 'auth/popup-closed-by-user': return 'ログイン画面が閉じられました。';
-        default: return '認証に失敗しました。Firebaseの設定や通信状況をご確認ください。';
+        case 'auth/invalid-credential':
+          return 'メールアドレスまたはパスワードが一致しません。初めての場合は「新規登録」タブからアカウントを作成してください。';
+        case 'auth/email-already-in-use':
+          return 'このメールアドレスはすでに登録されています。「ログイン」タブからログインしてください。';
+        case 'auth/weak-password':
+          return 'パスワードは6文字以上で設定してください。';
+        case 'auth/operation-not-allowed':
+          return 'Firebase側で「メール/パスワード」または「Google」のサインイン方法が有効になっていません。Firebaseコンソールの Authentication ＞ Sign-in method から有効化してください。';
+        case 'auth/unauthorized-domain':
+          return `このURLのドメイン（${location.hostname}）がFirebaseの「承認済みドメイン」に登録されていません。Authentication ＞ 設定 ＞ 承認済みドメイン に追加してください。`;
+        case 'auth/network-request-failed':
+          return '通信エラーが発生しました。ネット接続や広告ブロッカー・拡張機能をご確認ください。';
+        case 'auth/popup-closed-by-user':
+          return 'ログイン画面が閉じられました。';
+        default:
+          return `認証に失敗しました（${code || '不明なエラー'}）。Firebase側のAuthentication設定をご確認ください。`;
       }
     }
 
     // -------------------------------------------------------------------------
     // 認証状態監視＆Firestore購読
     // -------------------------------------------------------------------------
-    onAuthStateChanged(auth, (user) => {
-      loadingScreen.classList.add('hidden');
-      if (unsubscribeRecords) { unsubscribeRecords(); unsubscribeRecords = null; }
-      if (unsubscribeGoal) { unsubscribeGoal(); unsubscribeGoal = null; }
+    if (auth) {
+      getRedirectResult(auth).catch((err) => {
+        showAuthError(formatAuthError(err));
+      });
 
-      if (user) {
-        currentUser = user;
-        authScreen.classList.add('hidden');
-        mainScreen.classList.remove('hidden');
-        renderUserProfile(user);
-        document.getElementById('rec-date').value = getTodayDateStr();
-        subscribeUserData(user.uid);
-      } else {
-        currentUser = null;
-        records = [];
-        monthlyGoalMinutes = 0;
-        mainScreen.classList.add('hidden');
-        authScreen.classList.remove('hidden');
-      }
-    });
+      onAuthStateChanged(auth, (user) => {
+        loadingScreen.classList.add('hidden');
+        if (unsubscribeRecords) { unsubscribeRecords(); unsubscribeRecords = null; }
+        if (unsubscribeGoal) { unsubscribeGoal(); unsubscribeGoal = null; }
+
+        if (user) {
+          currentUser = user;
+          clearAuthMessages();
+          authScreen.classList.add('hidden');
+          mainScreen.classList.remove('hidden');
+          renderUserProfile(user);
+          document.getElementById('rec-date').value = getTodayDateStr();
+          subscribeUserData(user.uid);
+        } else {
+          currentUser = null;
+          records = [];
+          monthlyGoalMinutes = 0;
+          mainScreen.classList.add('hidden');
+          authScreen.classList.remove('hidden');
+        }
+      });
+    }
 
     function renderUserProfile(user) {
       const name = user.displayName || (user.email ? user.email.split('@')[0] : 'ユーザー');
@@ -520,16 +583,36 @@
 
     function subscribeUserData(uid) {
       const q = query(collection(db, 'users', uid, 'records'), orderBy('date', 'desc'));
-      unsubscribeRecords = onSnapshot(q, (snapshot) => {
-        records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        renderMonthView();
-      });
+      unsubscribeRecords = onSnapshot(
+        q,
+        (snapshot) => {
+          records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          renderMonthView();
+        },
+        (err) => {
+          showToast(`データ読込エラー: ${err.code || err.message}`);
+        }
+      );
 
+      subscribeGoalForCurrentMonth(uid);
+    }
+
+    function subscribeGoalForCurrentMonth(uid) {
+      if (unsubscribeGoal) {
+        unsubscribeGoal();
+        unsubscribeGoal = null;
+      }
       const goalRef = doc(db, 'users', uid, 'goals', currentYearMonth);
-      unsubscribeGoal = onSnapshot(goalRef, (snap) => {
-        monthlyGoalMinutes = snap.exists() ? (snap.data().goalMinutes || 0) : 0;
-        renderMonthView();
-      });
+      unsubscribeGoal = onSnapshot(
+        goalRef,
+        (snap) => {
+          monthlyGoalMinutes = snap.exists() ? (snap.data().goalMinutes || 0) : 0;
+          renderMonthView();
+        },
+        (err) => {
+          showToast(`目標読込エラー: ${err.code || err.message}`);
+        }
+      );
     }
 
     // 月切り替え
@@ -538,12 +621,7 @@
       const d = new Date(y, m - 1 + delta, 1);
       currentYearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (currentUser) {
-        if (unsubscribeGoal) unsubscribeGoal();
-        const goalRef = doc(db, 'users', currentUser.uid, 'goals', currentYearMonth);
-        unsubscribeGoal = onSnapshot(goalRef, (snap) => {
-          monthlyGoalMinutes = snap.exists() ? (snap.data().goalMinutes || 0) : 0;
-          renderMonthView();
-        });
+        subscribeGoalForCurrentMonth(currentUser.uid);
       }
       renderMonthView();
     }
@@ -553,7 +631,7 @@
 
     // 目標設定
     document.getElementById('edit-goal-btn').addEventListener('click', async () => {
-      if (!currentUser) return;
+      if (!currentUser || !db) return;
       const currentHours = (monthlyGoalMinutes / 60).toString();
       const input = prompt('今月の目標時間を時間単位で入力してください（例：30 や 15.5）\n※0を入力すると未設定になります', currentHours);
       if (input === null) return;
@@ -563,8 +641,12 @@
         return;
       }
       const goalMin = Math.round(parsed * 60);
-      await setDoc(doc(db, 'users', currentUser.uid, 'goals', currentYearMonth), { goalMinutes: goalMin });
-      showToast('月間目標を更新しました');
+      try {
+        await setDoc(doc(db, 'users', currentUser.uid, 'goals', currentYearMonth), { goalMinutes: goalMin });
+        showToast('月間目標を更新しました');
+      } catch (err) {
+        showToast(`保存エラー: ${err.code || err.message}`);
+      }
     });
 
     // 画面描画
@@ -618,10 +700,14 @@
 
       listEl.querySelectorAll('.delete-rec-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!currentUser) return;
+          if (!currentUser || !db) return;
           if (!confirm('この記録を削除しますか？')) return;
-          await deleteDoc(doc(db, 'users', currentUser.uid, 'records', btn.dataset.deleteId));
-          showToast('記録を削除しました');
+          try {
+            await deleteDoc(doc(db, 'users', currentUser.uid, 'records', btn.dataset.deleteId));
+            showToast('記録を削除しました');
+          } catch (err) {
+            showToast(`削除エラー: ${err.code || err.message}`);
+          }
         });
       });
     }
@@ -746,7 +832,7 @@
 
     document.getElementById('record-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!currentUser) return;
+      if (!currentUser || !db) return;
 
       const date = document.getElementById('rec-date').value;
       const category = document.getElementById('rec-category').value;
@@ -771,16 +857,19 @@
         return;
       }
 
-      await addDoc(collection(db, 'users', currentUser.uid, 'records'), {
-        date,
-        category,
-        minutes,
-        memo,
-        createdAt: Date.now()
-      });
-
-      document.getElementById('rec-memo').value = '';
-      showToast(`${formatMinutes(minutes)} を記録しました`);
+      try {
+        await addDoc(collection(db, 'users', currentUser.uid, 'records'), {
+          date,
+          category,
+          minutes,
+          memo,
+          createdAt: Date.now()
+        });
+        document.getElementById('rec-memo').value = '';
+        showToast(`${formatMinutes(minutes)} を記録しました`);
+      } catch (err) {
+        showToast(`追加エラー: ${err.code || err.message}`);
+      }
     });
   </script>
 </body>
